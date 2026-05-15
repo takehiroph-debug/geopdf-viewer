@@ -1,4 +1,4 @@
-const CACHE = 'geopdf-v1';
+const CACHE = 'geopdf-v3';
 const SHARE_CACHE = 'geopdf-share';
 
 // インストール時にアプリシェルをキャッシュ
@@ -10,7 +10,11 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE && k !== SHARE_CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', e => {
