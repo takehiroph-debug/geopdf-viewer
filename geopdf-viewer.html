@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GeoPDF ビューア</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #0f0f17;
+      color: #e0e0f0;
+      overflow: hidden;
+    }
+
+    /* ── 地図（全画面） ── */
+    #map {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+    }
+
+    /* ── 上部ツールバー ── */
+    #toolbar {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      display: flex;
+      gap: 8px;
+    }
+
+    .tool-btn {
+      background: #1a1a2eee;
+      border: 1px solid #3a3a6a;
+      color: #e0e0f0;
+      padding: 10px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: background 0.15s;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tool-btn:active { background: #6d28d9cc; }
+
+    /* ── 下部パネル ── */
+    #panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background: #1a1a2ef5;
+      border-top: 1px solid #2e2e5e;
+      border-radius: 16px 16px 0 0;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transform: translateY(calc(100% - 52px));
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      max-height: 75dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    #panel.open {
+      transform: translateY(0);
+    }
+
+    /* パネルのハンドル */
+    #panelHandle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      cursor: pointer;
+      min-height: 52px;
+      -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+    #panelHandle::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 8px;
+      width: 36px;
+      height: 4px;
+      background: #3a3a6a;
+      border-radius: 2px;
+    }
+
+    #panelTitle {
+      font-size: 13px;
+      font-weight: 600;
+      color: #a78bfa;
+    }
+
+    #panelCount {
+      font-size: 12px;
+      color: #4b4b7a;
+    }
+
+    /* パネルのコンテンツ */
+    #panelContent {
+      overflow-y: auto;
+      padding: 0 12px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* ── PDF カード ── */
+    .pdf-card {
+      background: #212140;
+      border: 1px solid #2e2e5e;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .pdf-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pdf-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .pdf-name {
+      font-size: 12px;
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #c4c4e8;
+    }
+
+    .pdf-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      background: #2e2e5e;
+      border: none;
+      color: #a0a0c8;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+    .icon-btn:active { background: #3a3a70; }
+    .icon-btn.active { background: #6d28d9; color: #f0e8ff; }
+    .icon-btn.del:active { background: #7f1d1d; color: #fca5a5; }
+
+    .pdf-coords {
+      font-size: 10px;
+      color: #4b4b7a;
+      font-feature-settings: 'tnum';
+    }
+
+    .pdf-opacity-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pdf-opacity-row label { font-size: 11px; color: #4b4b7a; white-space: nowrap; }
+    .opacity-slider {
+      flex: 1;
+      accent-color: #7c3aed;
+    }
+    .opacity-val { font-size: 11px; color: #6b6b9a; width: 32px; text-align: right; }
+
+    .pdf-status {
+      font-size: 12px;
+      color: #818cf8;
+      padding: 4px 0;
+    }
+    .pdf-status.error { color: #f87171; white-space: pre-wrap; }
+
+    /* ── ドロップオーバーレイ ── */
+    #dropOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(109, 40, 217, 0.2);
+      border: 3px dashed #7c3aed;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 600;
+      color: #a78bfa;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+    }
+    #dropOverlay.show { display: flex; }
+
+    /* ── Leaflet 調整 ── */
+    .leaflet-control-zoom { display: none; }  /* モバイルではピンチズームを使う */
+    .leaflet-control-layers { border-radius: 8px !important; }
+
+    /* ── デスクトップ時のレイアウト ── */
+    @media (min-width: 768px) {
+      body { flex-direction: row; }
+
+      #map { flex: 1; height: 100dvh; }
+
+      #toolbar { display: none; }
+
+      #panel {
+        position: relative;
+        transform: none !important;
+        width: 300px;
+        min-width: 300px;
+        max-height: 100dvh;
+        border-radius: 0;
+        border-top: none;
+        border-right: 1px solid #2e2e5e;
+        order: -1;
+        flex-direction: column;
+      }
+
+      #panelHandle {
+        cursor: default;
+        border-bottom: 1px solid #2e2e5e;
+      }
+      #panelHandle::before { display: none; }
+
+      #panelContent { padding: 12px 12px 24px; }
+
+      .leaflet-control-zoom { display: block; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- モバイル用ツールバー（地図の上に重ねる） -->
+<div id="toolbar">
+  <button class="tool-btn" id="addBtn">＋ PDF</button>
+  <button class="tool-btn" id="panelToggleBtn">一覧 ▲</button>
+</div>
+
+<!-- 地図 -->
+<div id="map"></div>
+
+<!-- 下部スライドパネル（モバイル）/ 左サイドバー（デスクトップ） -->
+<div id="panel">
+  <div id="panelHandle" id="panelHandleInner">
+    <span id="panelTitle">GeoPDF ビューア</span>
+    <span id="panelCount">0 件</span>
+  </div>
+  <div id="panelContent">
+    <!-- PDF 追加ボタン（デスクトップ用） -->
+    <button class="tool-btn" id="addBtnDesktop" style="width:100%; justify-content:center;">
+      ＋ GeoPDF を追加
+    </button>
+    <div id="pdfList"></div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" multiple accept=".pdf" style="display:none">
+<div id="dropOverlay">GeoPDF をドロップ</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+  import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+
+  // ── Leaflet 地図 ──────────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: true }).setView([36.412, 137.826], 14);
+
+  const baseLayers = {
+    '地理院標準': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '国土地理院',
+    }),
+    '地理院写真': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+      maxZoom: 18, attribution: '国土地理院',
+    }),
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap contributors',
+    }),
+  };
+  baseLayers['地理院標準'].addTo(map);
+  L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
+
+  // ── パネル開閉（モバイル） ────────────────────────────────────────
+  const panel = document.getElementById('panel');
+  const panelHandle = document.getElementById('panelHandle');
+  const panelToggleBtn = document.getElementById('panelToggleBtn');
+
+  function togglePanel() {
+    const isOpen = panel.classList.toggle('open');
+    panelToggleBtn.textContent = isOpen ? '一覧 ▼' : '一覧 ▲';
+  }
+  panelHandle.addEventListener('click', togglePanel);
+  panelToggleBtn.addEventListener('click', togglePanel);
+
+  // ── ファイル入力 ──────────────────────────────────────────────────
+  const fileInput = document.getElementById('fileInput');
+  const openPicker = () => fileInput.click();
+
+  document.getElementById('addBtn').addEventListener('click', openPicker);
+  document.getElementById('addBtnDesktop').addEventListener('click', openPicker);
+
+  fileInput.addEventListener('change', (e) => {
+    Array.from(e.target.files).forEach(loadGeoPDF);
+    e.target.value = '';
+  });
+
+  // ── ドラッグ＆ドロップ ───────────────────────────────────────────
+  const dropOverlay = document.getElementById('dropOverlay');
+  document.addEventListener('dragover', (e) => { e.preventDefault(); dropOverlay.classList.add('show'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) dropOverlay.classList.remove('show'); });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropOverlay.classList.remove('show');
+    Array.from(e.dataTransfer.files)
+      .filter(f => f.name.toLowerCase().endsWith('.pdf'))
+      .forEach(loadGeoPDF);
+  });
+
+  // ── カラーパレット ────────────────────────────────────────────────
+  const COLORS = ['#818cf8','#34d399','#fb923c','#f472b6','#38bdf8','#a3e635','#fbbf24','#e879f9'];
+  let colorIdx = 0;
+  let pdfCount = 0;
+
+  function updateCount() {
+    document.getElementById('panelCount').textContent = pdfCount + ' 件';
+  }
+
+  // ── GeoPDF の読み込みメイン処理 ──────────────────────────────────
+  async function loadGeoPDF(file) {
+    const color = COLORS[colorIdx++ % COLORS.length];
+    const card = createCard(file.name, color);
+    panel.classList.add('open');
+    panelToggleBtn.textContent = '一覧 ▼';
+
+    try {
+      const buffer = await file.arrayBuffer();
+
+      card.setStatus('座標を解析中...');
+      const geo = extractGPTS(buffer);
+      if (!geo) {
+        card.setError('位置情報（GPTS）が見つかりません。\nGeoPDF 形式ではない可能性があります。');
+        return;
+      }
+
+      card.setStatus('レンダリング中...');
+      const dataUrl = await renderPDFPage(buffer, (msg) => card.setStatus(msg));
+
+      const bounds = L.latLngBounds(
+        [geo.minLat, geo.minLon],
+        [geo.maxLat, geo.maxLon]
+      );
+      const overlay = L.imageOverlay(dataUrl, bounds, { opacity: 0.75 }).addTo(map);
+      map.fitBounds(bounds, { padding: [40, 40] });
+
+      pdfCount++;
+      updateCount();
+      card.setReady({ overlay, bounds, geo });
+
+    } catch (err) {
+      card.setError('読み込みエラー: ' + err.message);
+      console.error(err);
+    }
+  }
+
+  // ── GPTS 抽出 ────────────────────────────────────────────────────
+  function extractGPTS(buffer) {
+    const text = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+    const match = text.match(/\/GPTS\s*\[([^\]]+)\]/);
+    if (!match) return null;
+
+    const vals = match[1].trim().split(/\s+/).map(Number);
+    if (vals.length < 8 || vals.some(isNaN)) return null;
+
+    const lats = vals.filter((_, i) => i % 2 === 0);
+    const lons = vals.filter((_, i) => i % 2 === 1);
+
+    return {
+      minLat: Math.min(...lats), maxLat: Math.max(...lats),
+      minLon: Math.min(...lons), maxLon: Math.max(...lons),
+      centerLat: (Math.min(...lats) + Math.max(...lats)) / 2,
+      centerLon: (Math.min(...lons) + Math.max(...lons)) / 2,
+    };
+  }
+
+  // ── 画像取得：PDF内のJPEGを直接抽出（PDF.jsによるCanvas展開を回避）──
+  // QGISなどが出力するGeoPDFはページ全体が1枚のJPEGなので
+  // バイナリからSOI(FF D8)〜EOI(FF D9)を抜き出してBlobURLを返す。
+  // JPEGが見つからない場合のみPDF.jsにフォールバック。
+  async function renderPDFPage(buffer, onProgress) {
+    onProgress?.('画像を抽出中...');
+
+    // ── 方法1: 埋め込みJPEGを直接抽出（iOSでもメモリ安全）──
+    const jpegUrl = extractEmbeddedJPEG(buffer);
+    if (jpegUrl) {
+      onProgress?.('画像を読み込み中...');
+      // 画像が正常にデコードできるか確認してから返す
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('JPEG decode failed'));
+        img.src = jpegUrl;
+      });
+      return jpegUrl;
+    }
+
+    // ── 方法2: PDF.jsでレンダリング（ベクターPDF等へのフォールバック）──
+    onProgress?.('レンダリング中...');
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    const MAX_PX = isMobile ? 1024 : 2048;
+
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const page = await pdf.getPage(1);
+    const vp0  = page.getViewport({ scale: 1.0 });
+    const scale = Math.min(MAX_PX / vp0.width, MAX_PX / vp0.height);
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    onProgress?.(`レンダリング中… (${canvas.width}×${canvas.height}px)`);
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  // PDFバイナリの先頭JPEGをBlobURLとして返す
+  function extractEmbeddedJPEG(buffer) {
+    const bytes = new Uint8Array(buffer);
+
+    // SOI マーカー (FF D8) を探す
+    let start = -1;
+    for (let i = 0; i < bytes.length - 1; i++) {
+      if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
+        start = i;
+        break;
+      }
+    }
+    if (start === -1) return null;
+
+    // EOI マーカー (FF D9) を末尾から探す
+    let end = -1;
+    for (let i = bytes.length - 1; i > start + 1; i--) {
+      if (bytes[i - 1] === 0xFF && bytes[i] === 0xD9) {
+        end = i;
+        break;
+      }
+    }
+    if (end === -1) return null;
+
+    const jpeg = bytes.slice(start, end + 1);
+    return URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' }));
+  }
+
+  // ── カード UI ────────────────────────────────────────────────────
+  function createCard(name, color) {
+    const list = document.getElementById('pdfList');
+    const card = document.createElement('div');
+    card.className = 'pdf-card';
+    card.innerHTML = `
+      <div class="pdf-card-header">
+        <span class="pdf-dot" style="background:${color}"></span>
+        <span class="pdf-name" title="${esc(name)}">${esc(name)}</span>
+      </div>
+      <span class="pdf-status">読み込み中...</span>
+    `;
+    list.appendChild(card);
+
+    const statusEl = card.querySelector('.pdf-status');
+
+    return {
+      setStatus(msg) { statusEl.textContent = msg; statusEl.className = 'pdf-status'; },
+      setError(msg)  { statusEl.textContent = msg; statusEl.className = 'pdf-status error'; },
+      setReady({ overlay, bounds, geo }) {
+        statusEl.remove();
+        card.insertAdjacentHTML('beforeend', `
+          <div class="pdf-actions">
+            <button class="icon-btn active" data-role="vis">表示</button>
+            <button class="icon-btn" data-role="fit">移動</button>
+            <button class="icon-btn del" data-role="del">✕</button>
+          </div>
+          <div class="pdf-coords">
+            ${geo.centerLat.toFixed(5)}°N, ${geo.centerLon.toFixed(5)}°E
+          </div>
+          <div class="pdf-opacity-row">
+            <label>透過</label>
+            <input type="range" class="opacity-slider" min="0" max="100" value="75">
+            <span class="opacity-val">75%</span>
+          </div>
+        `);
+
+        const visBtn = card.querySelector('[data-role="vis"]');
+        const slider = card.querySelector('.opacity-slider');
+        const opVal  = card.querySelector('.opacity-val');
+
+        card.querySelector('[data-role="fit"]').addEventListener('click', () =>
+          map.fitBounds(bounds, { padding: [40, 40] })
+        );
+
+        card.querySelector('[data-role="del"]').addEventListener('click', () => {
+          map.removeLayer(overlay);
+          card.remove();
+          pdfCount--;
+          updateCount();
+        });
+
+        visBtn.addEventListener('click', () => {
+          if (map.hasLayer(overlay)) {
+            map.removeLayer(overlay);
+            visBtn.textContent = '非表示';
+            visBtn.classList.remove('active');
+          } else {
+            overlay.addTo(map);
+            visBtn.textContent = '表示';
+            visBtn.classList.add('active');
+          }
+        });
+
+        slider.addEventListener('input', () => {
+          const v = parseInt(slider.value);
+          overlay.setOpacity(v / 100);
+          opVal.textContent = v + '%';
+        });
+      }
+    };
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
