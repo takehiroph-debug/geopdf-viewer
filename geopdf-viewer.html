@@ -299,13 +299,13 @@
 
   const baseLayers = {
     '地理院標準': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      maxZoom: 18, attribution: '国土地理院',
+      maxZoom: 18, maxNativeZoom: 18, attribution: '国土地理院',
     }),
     '地理院写真': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
-      maxZoom: 18, attribution: '国土地理院',
+      maxZoom: 18, maxNativeZoom: 18, attribution: '国土地理院',
     }),
     'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap contributors',
+      maxZoom: 22, maxNativeZoom: 19, attribution: '© OpenStreetMap contributors',
     }),
   };
   baseLayers['地理院標準'].addTo(map);
