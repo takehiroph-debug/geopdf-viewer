@@ -418,28 +418,24 @@
     };
   }
 
-  // ── 画像取得：PDF内のJPEGを直接抽出（PDF.jsによるCanvas展開を回避）──
+  // ── 画像取得 ──────────────────────────────────────────────────────
+  // PC  → PDF.js でフル描画（ラスター＋ベクターすべて反映）
+  // iOS → 組み込みJPEGを直接抽出（メモリ安全。ベクター地物が別レイヤーの
+  //        PDFでは地物が欠落する場合があります）
   async function renderPDFPage(buffer, onProgress) {
-    onProgress?.('画像を抽出中...');
+    const isMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 方法1: 埋め込みJPEGを直接抽出（iOSでもメモリ安全）
-    const jpegBytes = extractEmbeddedJPEGBytes(buffer);
-    if (jpegBytes) {
-      onProgress?.('画像を読み込み中...');
-      const url = URL.createObjectURL(new Blob([jpegBytes], { type: 'image/jpeg' }));
-      await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = () => reject(new Error('JPEG decode failed'));
-        img.src = url;
-      });
-      return { url, jpegBytes };
+    if (isMobile) {
+      return renderMobile(buffer, onProgress);
+    } else {
+      return renderDesktop(buffer, onProgress);
     }
+  }
 
-    // 方法2: PDF.jsでレンダリング（ベクターPDF等へのフォールバック）
+  // PC：PDF.jsでレンダリング（ベクター地物も含めて正確に描画）
+  async function renderDesktop(buffer, onProgress) {
     onProgress?.('レンダリング中...');
-    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    const MAX_PX = isMobile ? 1024 : 2048;
+    const MAX_PX = 2048;
 
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
     const page = await pdf.getPage(1);
@@ -453,12 +449,46 @@
     onProgress?.(`レンダリング中… (${canvas.width}×${canvas.height}px)`);
 
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const url = canvas.toDataURL('image/jpeg', 0.88);
+    const jpegBytes = await new Promise(resolve =>
+      canvas.toBlob(b => b.arrayBuffer().then(ab => resolve(new Uint8Array(ab))), 'image/jpeg', 0.88)
+    );
+    return { url, jpegBytes };
+  }
+
+  // iOS：組み込みJPEGを直接取り出す（PDF.jsのメモリ問題を回避）
+  async function renderMobile(buffer, onProgress) {
+    onProgress?.('画像を抽出中...');
+    const jpegBytes = extractEmbeddedJPEGBytes(buffer);
+
+    if (jpegBytes) {
+      const url = URL.createObjectURL(new Blob([jpegBytes], { type: 'image/jpeg' }));
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('JPEG decode failed'));
+        img.src = url;
+      });
+      return { url, jpegBytes };
+    }
+
+    // JPEGが見つからない場合はPDF.jsで低解像度フォールバック
+    onProgress?.('レンダリング中（低解像度）...');
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const page = await pdf.getPage(1);
+    const vp0  = page.getViewport({ scale: 1.0 });
+    const scale = Math.min(768 / vp0.width, 768 / vp0.height);
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     const url = canvas.toDataURL('image/jpeg', 0.85);
-    // canvas からは Blob を生成して jpegBytes も作る
-    const jpegBlobBytes = await new Promise(resolve => {
-      canvas.toBlob(b => b.arrayBuffer().then(ab => resolve(new Uint8Array(ab))), 'image/jpeg', 0.85);
-    });
-    return { url, jpegBytes: jpegBlobBytes };
+    const jpegBytes2 = await new Promise(resolve =>
+      canvas.toBlob(b => b.arrayBuffer().then(ab => resolve(new Uint8Array(ab))), 'image/jpeg', 0.85)
+    );
+    return { url, jpegBytes: jpegBytes2 };
   }
 
   // PDFバイナリの先頭JPEGをUint8Arrayとして返す
