@@ -233,7 +233,9 @@
     .leaflet-control-layers { border-radius: 8px !important; }
 
     /* ── 現在地ボタン ── */
+    #locBtn.locating { opacity: 0.6; animation: loc-pulse 0.8s infinite alternate; }
     #locBtn.tracking { background: #065f46cc !important; color: #6ee7b7; border-color: #6ee7b7; }
+    @keyframes loc-pulse { from { opacity: 0.6; } to { opacity: 1; } }
 
     /* ── 地図中央の十字線 ── */
     #mapCrosshair {
@@ -950,8 +952,7 @@
       gpsWatchId = null;
       if (gpsMarker) { map.removeLayer(gpsMarker); gpsMarker = null; }
       if (gpsAccCircle) { map.removeLayer(gpsAccCircle); gpsAccCircle = null; }
-      locBtn.textContent = '現在地';
-      locBtn.classList.remove('tracking');
+      locBtn.classList.remove('tracking', 'locating');
       return;
     }
 
@@ -960,7 +961,7 @@
       return;
     }
 
-    locBtn.textContent = '取得中…';
+    locBtn.classList.add('locating');
 
     gpsWatchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -990,12 +991,11 @@
           gpsAccCircle.setRadius(accuracy);
         }
 
-        locBtn.textContent = '現在地 ●';
+        locBtn.classList.remove('locating');
         locBtn.classList.add('tracking');
       },
       (err) => {
-        locBtn.textContent = '現在地';
-        locBtn.classList.remove('tracking');
+        locBtn.classList.remove('tracking', 'locating');
         gpsWatchId = null;
         const msg = err.code === 1 ? '位置情報の許可が必要です' : '位置情報を取得できませんでした';
         alert(msg);
