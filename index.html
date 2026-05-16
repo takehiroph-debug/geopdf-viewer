@@ -235,6 +235,33 @@
     /* ── 現在地ボタン ── */
     #locBtn.tracking { background: #065f46cc !important; color: #6ee7b7; border-color: #6ee7b7; }
 
+    /* ── 地図中央の十字線 ── */
+    #mapCrosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+      z-index: 800;
+    }
+    #mapCrosshair::before,
+    #mapCrosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(249,115,22,0.85);
+      border-radius: 2px;
+    }
+    #mapCrosshair::before {
+      width: 2px; height: 100%;
+      left: 50%; transform: translateX(-50%);
+    }
+    #mapCrosshair::after {
+      width: 100%; height: 2px;
+      top: 50%; transform: translateY(-50%);
+    }
+
     /* ── 記録セクション ── */
     .rec-section {
       background: #212140;
@@ -367,12 +394,15 @@
 <div id="toolbar">
   <button class="tool-btn" id="addBtn">＋ PDF</button>
   <button class="tool-btn" id="locBtn">現在地</button>
-  <button class="tool-btn" id="recQuickBtn">● REC</button>
+  <button class="tool-btn" id="wpQuickBtn">📍 ポイント</button>
   <button class="tool-btn" id="panelToggleBtn">一覧 ▼</button>
 </div>
 
 <!-- 地図 -->
 <div id="map"></div>
+
+<!-- 地図中央の十字線 -->
+<div id="mapCrosshair"></div>
 
 <!-- 下部スライドパネル（モバイル）/ 左サイドバー（デスクトップ） -->
 <div id="panel">
@@ -403,16 +433,14 @@
       </div>
     </div>
 
-    <!-- ポイント記録 -->
+    <!-- ポイント記録（リスト表示のみ。追加はツールバーの📍ボタン） -->
     <div class="rec-section">
       <div class="rec-title">
         📍 ポイント記録
-      </div>
-      <div class="rec-btns">
-        <button class="rec-btn start" id="wpBtn">＋ 現在地にポイント追加</button>
+        <span style="font-size:10px;color:#6b6b9a;font-weight:400">（地図中央に追加）</span>
       </div>
       <div class="wp-list" id="wpList"></div>
-      <div class="rec-btns" style="margin-top:4px">
+      <div class="rec-btns">
         <button class="rec-btn" id="wpClearBtn" disabled>クリア</button>
       </div>
     </div>
@@ -472,9 +500,6 @@
   panel.classList.add('open');
   panelToggleBtn.textContent = '一覧 ▼';
 
-  // ツールバーの REC ボタン → recBtn と連動
-  const recQuickBtn = document.getElementById('recQuickBtn');
-  recQuickBtn.addEventListener('click', () => recBtn.click());
 
 
   // ── ファイル入力 ──────────────────────────────────────────────────
@@ -777,7 +802,7 @@
   let recStartTime = null;
 
   const recBtn      = document.getElementById('recBtn');
-  const wpBtn       = document.getElementById('wpBtn');
+  const wpQuickBtn  = document.getElementById('wpQuickBtn');
   const gpxBtn      = document.getElementById('gpxBtn');
   const recClearBtn = document.getElementById('recClearBtn');
   const wpClearBtn  = document.getElementById('wpClearBtn');
@@ -808,16 +833,12 @@
       recWatchId = null;
       recBtn.textContent = '● 記録開始';
       recBtn.className = 'rec-btn start';
-      recQuickBtn.textContent = '● REC';
-      recQuickBtn.style.color = '';
       recDot.classList.remove('active');
     } else {
       if (!navigator.geolocation) { alert('位置情報に対応していません'); return; }
       recStartTime = new Date();
       recBtn.textContent = '■ 記録停止';
       recBtn.className = 'rec-btn stop';
-      recQuickBtn.textContent = '■ STOP';
-      recQuickBtn.style.color = '#6ee7b7';
       recDot.classList.add('active');
 
       recWatchId = navigator.geolocation.watchPosition(pos => {
@@ -869,25 +890,10 @@
     gpxBtn.disabled = false;
   }
 
-  wpBtn.addEventListener('click', () => {
-    // トラック記録中なら最新点を使用、そうでなければ現在地を取得
-    if (trackPoints.length > 0) {
-      const last = trackPoints[trackPoints.length - 1];
-      addWaypoint(last.lat, last.lon);
-    } else {
-      if (!navigator.geolocation) { alert('位置情報に対応していません'); return; }
-      wpBtn.textContent = '取得中...';
-      wpBtn.disabled = true;
-      navigator.geolocation.getCurrentPosition(pos => {
-        wpBtn.textContent = '＋ 現在地にポイント追加';
-        wpBtn.disabled = false;
-        addWaypoint(pos.coords.latitude, pos.coords.longitude);
-      }, () => {
-        wpBtn.textContent = '＋ 現在地にポイント追加';
-        wpBtn.disabled = false;
-        alert('位置情報を取得できませんでした');
-      }, { enableHighAccuracy: true, timeout: 15000 });
-    }
+  // ツールバーの📍ボタン → 地図の中央座標にポイント追加
+  wpQuickBtn.addEventListener('click', () => {
+    const center = map.getCenter();
+    addWaypoint(center.lat, center.lng);
   });
 
   // ポイントクリア
