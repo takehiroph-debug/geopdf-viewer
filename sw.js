@@ -1,4 +1,4 @@
-const CACHE = 'geopdf-v6';
+const CACHE = 'geopdf-v7';
 const SHARE_CACHE = 'geopdf-share';
 
 // インストール時にアプリシェルをキャッシュ

@@ -367,7 +367,8 @@
 <div id="toolbar">
   <button class="tool-btn" id="addBtn">＋ PDF</button>
   <button class="tool-btn" id="locBtn">現在地</button>
-  <button class="tool-btn" id="panelToggleBtn">一覧 ▲</button>
+  <button class="tool-btn" id="recQuickBtn">● REC</button>
+  <button class="tool-btn" id="panelToggleBtn">一覧 ▼</button>
 </div>
 
 <!-- 地図 -->
@@ -466,6 +467,15 @@
   }
   panelHandle.addEventListener('click', togglePanel);
   panelToggleBtn.addEventListener('click', togglePanel);
+
+  // 起動時はパネルを開いておく（PDF未読み込みでも記録ボタンがすぐ使える）
+  panel.classList.add('open');
+  panelToggleBtn.textContent = '一覧 ▼';
+
+  // ツールバーの REC ボタン → recBtn と連動
+  const recQuickBtn = document.getElementById('recQuickBtn');
+  recQuickBtn.addEventListener('click', () => recBtn.click());
+
 
   // ── ファイル入力 ──────────────────────────────────────────────────
   const fileInput = document.getElementById('fileInput');
@@ -798,12 +808,16 @@
       recWatchId = null;
       recBtn.textContent = '● 記録開始';
       recBtn.className = 'rec-btn start';
+      recQuickBtn.textContent = '● REC';
+      recQuickBtn.style.color = '';
       recDot.classList.remove('active');
     } else {
       if (!navigator.geolocation) { alert('位置情報に対応していません'); return; }
       recStartTime = new Date();
       recBtn.textContent = '■ 記録停止';
       recBtn.className = 'rec-btn stop';
+      recQuickBtn.textContent = '■ STOP';
+      recQuickBtn.style.color = '#6ee7b7';
       recDot.classList.add('active');
 
       recWatchId = navigator.geolocation.watchPosition(pos => {
